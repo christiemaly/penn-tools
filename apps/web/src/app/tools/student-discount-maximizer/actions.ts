@@ -1,0 +1,128 @@
+"use server";
+
+// Student Discount Central's server actions. Each one checks the browser's
+// input, gets the signed-in student where it needs one, and calls a function in
+// tools/student-discount-maximizer/src/. Browsing works signed out; voting,
+// adding and expiring need sign-in.
+//
+// Errors thrown from a server action lose their class on the way to the
+// browser, so problems to show the student are returned as data instead.
+
+import { isAIError } from "@penntools/core/ai";
+import type { AIProvider } from "@penntools/core/ai";
+import {
+  CATEGORIES,
+  DiscountError,
+  KINDS,
+  addDiscount,
+  checkPastedText,
+  fillFromText,
+  listDiscounts,
+  markExpired,
+  restore,
+  vote,
+  type Discount,
+  type DiscountCategory,
+  type DiscountKind,
+  type DealDraft,
+} from "@penntools/tool-student-discount-maximizer";
+import { getAI } from "@/lib/ai";
+import { getCurrentUser } from "@/lib/auth";
+import { NOT_SET_UP_MESSAGE, db, isNotSetUp } from "./database";
+
+export interface ActionError {
+  /** The AIError kind, when the AI API failed. */
+  kind?: string;
+  message: string;
+}
+
+export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: ActionError };
+
+export interface Filters {
+  status: "active" | "expired";
+  kind: DiscountKind | null;
+  category: DiscountCategory | null;
+  search: string;
+  sort: "top" | "new";
+}
+
+const signedOut: ActionResult<never> = {
+  ok: false,
+  error: { message: "Sign in with the button at the top right to do that." },
+};
+
+function fail(message: string): ActionResult<never> {
+  return { ok: false, error: { message } };
+}
+
+async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (error) {
+    if (error instanceof DiscountError) return fail(error.message);
+    if (isAIError(error)) return { ok: false, error: error.toJSON() };
+    if (isNotSetUp(error)) return fail(NOT_SET_UP_MESSAGE);
+    throw error;
+  }
+}
+
+function database() {
+  const sql = db();
+  if (!sql) throw new Error("The database is not configured (check DATABASE_URL).");
+  return sql;
+}
+
+/** Deals matching the filters, with the student's own votes when signed in. */
+export async function loadDiscounts(filters: Filters): Promise<ActionResult<Discount[]>> {
+  const f = (filters ?? {}) as Partial<Filters>;
+  const user = await getCurrentUser();
+  return run(() =>
+    listDiscounts(database(), {
+      userId: user?.id ?? null,
+      status: f.status === "expired" ? "expired" : "active",
+      kind: KINDS.includes(f.kind as DiscountKind) ? (f.kind as DiscountKind) : null,
+      category: CATEGORIES.includes(f.category as DiscountCategory) ? (f.category as DiscountCategory) : null,
+      search: typeof f.search === "string" ? f.search : null,
+      sort: f.sort === "new" ? "new" : "top",
+    }),
+  );
+}
+
+/** Adds a deal from the Add a deal form; addDiscount checks every field. */
+export async function addDeal(input: unknown): Promise<ActionResult<Discount>> {
+  const user = await getCurrentUser();
+  if (!user) return signedOut;
+  return run(() => addDiscount(database(), user.id, input));
+}
+
+/** true "works", false "doesn't work", null to take the vote back. */
+export async function castVote(discountId: string, works: boolean | null): Promise<ActionResult<Discount>> {
+  const user = await getCurrentUser();
+  if (!user) return signedOut;
+  if (typeof discountId !== "string") return fail("That deal doesn't exist.");
+  return run(() => vote(database(), user.id, discountId, works));
+}
+
+export async function expireDeal(discountId: string): Promise<ActionResult<Discount>> {
+  const user = await getCurrentUser();
+  if (!user) return signedOut;
+  if (typeof discountId !== "string") return fail("That deal doesn't exist.");
+  return run(() => markExpired(database(), user.id, discountId));
+}
+
+export async function restoreDeal(discountId: string): Promise<ActionResult<Discount>> {
+  const user = await getCurrentUser();
+  if (!user) return signedOut;
+  if (typeof discountId !== "string") return fail("That deal doesn't exist.");
+  return run(() => restore(database(), user.id, discountId));
+}
+
+/** A draft of the Add a deal form from pasted text, on the student's own AI key. */
+export async function fillForm(provider: AIProvider, pastedText: string): Promise<ActionResult<DealDraft>> {
+  const ai = await getAI();
+  if (!ai) return signedOut;
+  const problem = checkPastedText(pastedText);
+  if (problem) return fail(problem);
+  // The AI API checks provider itself.
+  return run(() => fillFromText(ai, provider, pastedText));
+}
