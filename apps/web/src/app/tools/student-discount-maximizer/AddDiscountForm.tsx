@@ -6,7 +6,13 @@
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import type { AIProvider } from "@penntools/core/ai";
-import type { DealDraft, Discount, DiscountCategory, DiscountKind } from "@penntools/tool-student-discount-maximizer";
+import type {
+  DealDraft,
+  Discount,
+  DiscountCategory,
+  DiscountKind,
+  Neighborhood,
+} from "@penntools/tool-student-discount-maximizer";
 import { addDeal, fillForm, type ActionResult } from "./actions";
 import type { Option } from "./DiscountBoard";
 import styles from "./DiscountBoard.module.css";
@@ -30,9 +36,11 @@ interface FormState {
   discount: string;
   code: string;
   location: string;
+  neighborhood: Neighborhood;
   url: string;
   howToClaim: string;
   category: DiscountCategory;
+  pennSpecific: boolean;
 }
 
 const EMPTY: FormState = {
@@ -42,9 +50,11 @@ const EMPTY: FormState = {
   discount: "",
   code: "",
   location: "",
+  neighborhood: "university-city",
   url: "",
   howToClaim: "",
   category: "other",
+  pennSpecific: false,
 };
 
 // Errors about the student's AI key send them to Settings.
@@ -63,6 +73,7 @@ export function AddDiscountForm({
   providerLabels,
   kinds,
   categories,
+  neighborhoods,
   limits,
   onAdded,
 }: {
@@ -70,6 +81,7 @@ export function AddDiscountForm({
   providerLabels: Record<AIProvider, string>;
   kinds: Option<DiscountKind>[];
   categories: Option<DiscountCategory>[];
+  neighborhoods: Option<Neighborhood>[];
   limits: FormLimits;
   onAdded: (deal: Discount) => void;
 }) {
@@ -88,9 +100,11 @@ export function AddDiscountForm({
       discount: draft.discount ?? f.discount,
       code: draft.code ?? f.code,
       location: draft.location ?? f.location,
+      neighborhood: draft.neighborhood ?? f.neighborhood,
       url: draft.url ?? f.url,
       howToClaim: draft.howToClaim ?? f.howToClaim,
       category: draft.category ?? f.category,
+      pennSpecific: draft.pennSpecific ?? f.pennSpecific,
     }));
   }
 
@@ -141,6 +155,10 @@ export function AddDiscountForm({
             </select>
           </label>
         </div>
+        <label className={styles.checkbox}>
+          <input type="checkbox" checked={form.pennSpecific} onChange={(e) => set("pennSpecific", e.target.checked)} />
+          Only for Penn students (e.g. with a PennCard)
+        </label>
         <label className={styles.field}>
           Business
           <input className={styles.input} required maxLength={limits.business} placeholder="e.g. Spotify" value={form.business} onChange={(e) => set("business", e.target.value)} />
@@ -160,10 +178,26 @@ export function AddDiscountForm({
           </label>
         )}
         {form.kind === "local" && (
-          <label className={styles.field}>
-            Address or area
-            <input className={styles.input} required maxLength={limits.location} placeholder="e.g. 3601 Walnut St" value={form.location} onChange={(e) => set("location", e.target.value)} />
-          </label>
+          <>
+            <label className={styles.field}>
+              Address or area
+              <input className={styles.input} required maxLength={limits.location} placeholder="e.g. 3601 Walnut St" value={form.location} onChange={(e) => set("location", e.target.value)} />
+            </label>
+            <label className={styles.field}>
+              Neighborhood
+              <select
+                className={styles.select}
+                value={form.neighborhood}
+                onChange={(e) => set("neighborhood", e.target.value as Neighborhood)}
+              >
+                {neighborhoods.map((n) => (
+                  <option key={n.value} value={n.value}>
+                    {n.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
         )}
         <label className={styles.field}>
           Link{form.kind === "local" && " (optional)"}

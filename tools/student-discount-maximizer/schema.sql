@@ -28,6 +28,15 @@ CREATE TABLE IF NOT EXISTS discounts (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- True for deals only Penn students can get (PennCard perks, Penn-only
+-- prices), false for deals open to any student.
+ALTER TABLE discounts ADD COLUMN IF NOT EXISTS penn_specific BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Where a local spot is, e.g. 'university-city'; null for other deals. The
+-- list lives in NEIGHBORHOODS in src/discounts.ts, which checks it, so adding
+-- a neighborhood needs no database change.
+ALTER TABLE discounts ADD COLUMN IF NOT EXISTS neighborhood TEXT;
+
 CREATE INDEX IF NOT EXISTS discounts_status_idx ON discounts (status, created_at DESC);
 -- The daily submission limit counts a student's recent deals.
 CREATE INDEX IF NOT EXISTS discounts_creator_idx ON discounts (created_by, created_at);

@@ -4,7 +4,7 @@
 
 import { z } from "@penntools/core/ai";
 import type { AI, AIProvider } from "@penntools/core/ai";
-import { CATEGORIES, KINDS } from "./discounts.js";
+import { CATEGORIES, KINDS, NEIGHBORHOODS } from "./discounts.js";
 
 export const MAX_PASTED_TEXT_LENGTH = 8000;
 
@@ -17,9 +17,17 @@ export const DealDraft = z.object({
   discount: z.string().nullable().describe("What the student gets, e.g. '50% off' or 'Free admission'"),
   code: z.string().nullable().describe("The promo code exactly as written, or null if there is none"),
   location: z.string().nullable().describe("Street address or area for in-person deals, or null"),
+  neighborhood: z
+    .enum(NEIGHBORHOODS)
+    .nullable()
+    .describe("The Philadelphia neighborhood of an in-person deal, only if the text or address makes it clear; else null"),
   url: z.string().nullable().describe("The full https:// link to claim the deal, only if it appears in the text"),
   howToClaim: z.string().nullable().describe("Short steps to claim it, from the text"),
   category: z.enum(CATEGORIES).nullable(),
+  pennSpecific: z
+    .boolean()
+    .nullable()
+    .describe("true if only Penn students can get it (e.g. with a PennCard), false if any student can, null if unclear"),
 });
 export type DealDraft = z.infer<typeof DealDraft>;
 

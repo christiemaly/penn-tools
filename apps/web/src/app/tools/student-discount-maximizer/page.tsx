@@ -12,11 +12,13 @@ import {
   KIND_LABELS,
   LIMITS,
   MAX_PASTED_TEXT_LENGTH,
+  NEIGHBORHOODS,
+  NEIGHBORHOOD_LABELS,
   listDiscounts,
 } from "@penntools/tool-student-discount-maximizer";
 import { getAI } from "@/lib/ai";
 import { getCurrentUser } from "@/lib/auth";
-import { NOT_SET_UP_MESSAGE, db, isNotSetUp } from "./database";
+import { db, setupProblem } from "./database";
 import { DiscountBoard } from "./DiscountBoard";
 import styles from "./DiscountBoard.module.css";
 
@@ -33,11 +35,12 @@ export default async function StudentDiscountCentralPage() {
   try {
     initialDeals = await listDiscounts(sql, { userId: user?.id ?? null, status: "active" });
   } catch (error) {
-    if (!isNotSetUp(error)) throw error;
+    const problem = setupProblem(error);
+    if (!problem) throw error;
     return (
       <div className={styles.page}>
         <h1 className={styles.title}>Student Discount Central</h1>
-        <p className={styles.error}>{NOT_SET_UP_MESSAGE}</p>
+        <p className={styles.error}>{problem}</p>
       </div>
     );
   }
@@ -52,6 +55,7 @@ export default async function StudentDiscountCentralPage() {
       providerLabels={PROVIDER_LABELS}
       kinds={KINDS.map((k) => ({ value: k, label: KIND_LABELS[k] }))}
       categories={CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABELS[c] }))}
+      neighborhoods={NEIGHBORHOODS.map((n) => ({ value: n, label: NEIGHBORHOOD_LABELS[n] }))}
       limits={{ ...LIMITS, pastedText: MAX_PASTED_TEXT_LENGTH }}
     />
   );

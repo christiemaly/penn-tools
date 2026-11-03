@@ -14,6 +14,7 @@ import {
   CATEGORIES,
   DiscountError,
   KINDS,
+  NEIGHBORHOODS,
   addDiscount,
   checkPastedText,
   fillFromText,
@@ -22,13 +23,15 @@ import {
   restore,
   vote,
   type Discount,
+  type DiscountAudience,
   type DiscountCategory,
   type DiscountKind,
   type DealDraft,
+  type Neighborhood,
 } from "@penntools/tool-student-discount-maximizer";
 import { getAI } from "@/lib/ai";
 import { getCurrentUser } from "@/lib/auth";
-import { NOT_SET_UP_MESSAGE, db, isNotSetUp } from "./database";
+import { db, setupProblem } from "./database";
 
 export interface ActionError {
   /** The AIError kind, when the AI API failed. */
@@ -42,6 +45,8 @@ export interface Filters {
   status: "active" | "expired";
   kind: DiscountKind | null;
   category: DiscountCategory | null;
+  audience: DiscountAudience | null;
+  neighborhood: Neighborhood | null;
   search: string;
   sort: "top" | "new";
 }
@@ -61,7 +66,8 @@ async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
   } catch (error) {
     if (error instanceof DiscountError) return fail(error.message);
     if (isAIError(error)) return { ok: false, error: error.toJSON() };
-    if (isNotSetUp(error)) return fail(NOT_SET_UP_MESSAGE);
+    const problem = setupProblem(error);
+    if (problem) return fail(problem);
     throw error;
   }
 }
@@ -82,6 +88,8 @@ export async function loadDiscounts(filters: Filters): Promise<ActionResult<Disc
       status: f.status === "expired" ? "expired" : "active",
       kind: KINDS.includes(f.kind as DiscountKind) ? (f.kind as DiscountKind) : null,
       category: CATEGORIES.includes(f.category as DiscountCategory) ? (f.category as DiscountCategory) : null,
+      audience: f.audience === "penn" || f.audience === "general" ? f.audience : null,
+      neighborhood: NEIGHBORHOODS.includes(f.neighborhood as Neighborhood) ? (f.neighborhood as Neighborhood) : null,
       search: typeof f.search === "string" ? f.search : null,
       sort: f.sort === "new" ? "new" : "top",
     }),

@@ -7,7 +7,8 @@
     "discount": "Premium at a student price",
     "url": "https://www.spotify.com/us/student/",
     "howToClaim": "Sign up on Spotify's student page and verify that you're enrolled. Re-verify every year.",
-    "category": "entertainment"
+    "category": "entertainment",
+    "pennSpecific": false
   },
   {
     "slug": "youtube-premium-student",
@@ -17,7 +18,8 @@
     "discount": "Premium at a student price",
     "url": "https://www.youtube.com/premium/student",
     "howToClaim": "Choose the student plan on the Premium page and verify your enrollment.",
-    "category": "entertainment"
+    "category": "entertainment",
+    "pennSpecific": false
   },
   {
     "slug": "hulu-student",
@@ -27,7 +29,8 @@
     "discount": "Hulu (with ads) at a student price",
     "url": "https://www.hulu.com/student",
     "howToClaim": "Sign up on Hulu's student page and verify your enrollment.",
-    "category": "entertainment"
+    "category": "entertainment",
+    "pennSpecific": false
   },
   {
     "slug": "amazon-prime-student",
@@ -37,7 +40,8 @@
     "discount": "Free trial, then Prime at a student price",
     "url": "https://www.amazon.com/joinstudent",
     "howToClaim": "Sign up with your Penn email address on the Prime Student page.",
-    "category": "shopping"
+    "category": "shopping",
+    "pennSpecific": false
   },
   {
     "slug": "unidays",
@@ -47,7 +51,8 @@
     "discount": "Brand discounts, often 10–20% off",
     "url": "https://www.myunidays.com/",
     "howToClaim": "Create a free account, verify with your Penn email, then get a code or link for each brand.",
-    "category": "shopping"
+    "category": "shopping",
+    "pennSpecific": false
   },
   {
     "slug": "student-beans",
@@ -57,7 +62,8 @@
     "discount": "Brand discounts and codes",
     "url": "https://www.studentbeans.com/",
     "howToClaim": "Create a free account and verify with your Penn email to unlock codes.",
-    "category": "shopping"
+    "category": "shopping",
+    "pennSpecific": false
   },
   {
     "slug": "apple-education",
@@ -67,7 +73,8 @@
     "discount": "Education prices, plus seasonal back-to-school offers",
     "url": "https://www.apple.com/us-edu/store",
     "howToClaim": "Shop through Apple's education store; you may be asked to verify through UNiDAYS.",
-    "category": "tech"
+    "category": "tech",
+    "pennSpecific": false
   },
   {
     "slug": "github-student-pack",
@@ -77,7 +84,8 @@
     "discount": "Free GitHub Pro and developer tools",
     "url": "https://education.github.com/pack",
     "howToClaim": "Apply with your Penn email and proof of enrollment, such as a photo of your PennCard.",
-    "category": "tech"
+    "category": "tech",
+    "pennSpecific": false
   },
   {
     "slug": "jetbrains-students",
@@ -87,7 +95,8 @@
     "discount": "Free educational licenses",
     "url": "https://www.jetbrains.com/community/education/",
     "howToClaim": "Apply with your Penn email; renew the license each year.",
-    "category": "tech"
+    "category": "tech",
+    "pennSpecific": false
   },
   {
     "slug": "figma-education",
@@ -97,7 +106,8 @@
     "discount": "Free education plan",
     "url": "https://www.figma.com/education/",
     "howToClaim": "Apply for education access from your Figma account and verify you're a student.",
-    "category": "tech"
+    "category": "tech",
+    "pennSpecific": false
   },
   {
     "slug": "notion-education",
@@ -107,7 +117,8 @@
     "discount": "Free plan upgrade for students",
     "url": "https://www.notion.so/product/notion-for-education",
     "howToClaim": "Sign up with your Penn email address, then claim the education plan in Settings.",
-    "category": "tech"
+    "category": "tech",
+    "pennSpecific": false
   },
   {
     "slug": "adobe-creative-cloud-students",
@@ -117,7 +128,8 @@
     "discount": "Discounted Creative Cloud All Apps",
     "url": "https://www.adobe.com/creativecloud/buy/students.html",
     "howToClaim": "Buy the student plan and verify your enrollment with your school email.",
-    "category": "tech"
+    "category": "tech",
+    "pennSpecific": false
   },
   {
     "slug": "microsoft-365-education",
@@ -127,7 +139,8 @@
     "discount": "Free Office apps for students",
     "url": "https://www.microsoft.com/en-us/education/products/office",
     "howToClaim": "Sign up with your Penn email address.",
-    "category": "tech"
+    "category": "tech",
+    "pennSpecific": false
   },
   {
     "slug": "amtrak-student",
@@ -137,7 +150,8 @@
     "discount": "Discounted fares for students",
     "url": "https://www.amtrak.com/student-discount",
     "howToClaim": "Choose the student discount when booking and bring your student ID on board.",
-    "category": "travel"
+    "category": "travel",
+    "pennSpecific": false
   },
   {
     "slug": "penn-museum",
@@ -146,9 +160,11 @@
     "title": "Free admission with your PennCard",
     "discount": "Free admission",
     "location": "3260 South St, Philadelphia",
+    "neighborhood": "university-city",
     "url": "https://www.penn.museum/",
     "howToClaim": "Show your PennCard at the front desk.",
-    "category": "culture"
+    "category": "culture",
+    "pennSpecific": true
   },
   {
     "slug": "ica-philadelphia",
@@ -157,9 +173,11 @@
     "title": "Free contemporary art on campus",
     "discount": "Free admission",
     "location": "118 S 36th St, Philadelphia",
+    "neighborhood": "university-city",
     "url": "https://icaphila.org/",
     "howToClaim": "Just walk in during opening hours.",
-    "category": "culture"
+    "category": "culture",
+    "pennSpecific": false
   },
   {
     "slug": "penn-live-arts",
@@ -168,9 +186,11 @@
     "title": "Student tickets for dance, theater and music",
     "discount": "Discounted student tickets",
     "location": "3680 Walnut St, Philadelphia",
+    "neighborhood": "university-city",
     "url": "https://pennlivearts.org/",
     "howToClaim": "Choose student tickets online or at the box office and bring your PennCard.",
-    "category": "entertainment"
+    "category": "entertainment",
+    "pennSpecific": true
   },
   {
     "slug": "philadelphia-orchestra-ezseatu",
@@ -179,9 +199,11 @@
     "title": "eZseatU student membership",
     "discount": "Concert tickets through a student membership",
     "location": "300 S Broad St, Philadelphia",
+    "neighborhood": "center-city",
     "url": "https://www.philorch.org/",
     "howToClaim": "Sign up for eZseatU on the orchestra's website, then reserve seats for concerts.",
-    "category": "entertainment"
+    "category": "entertainment",
+    "pennSpecific": false
   },
   {
     "slug": "philadelphia-museum-of-art",
@@ -190,9 +212,11 @@
     "title": "Student admission",
     "discount": "Discounted admission with a student ID",
     "location": "2600 Benjamin Franklin Pkwy, Philadelphia",
+    "neighborhood": "fairmount",
     "url": "https://philamuseum.org/",
     "howToClaim": "Buy a student ticket and show your PennCard at entry.",
-    "category": "culture"
+    "category": "culture",
+    "pennSpecific": false
   },
   {
     "slug": "barnes-foundation",
@@ -201,9 +225,11 @@
     "title": "Student admission",
     "discount": "Discounted admission with a student ID",
     "location": "2025 Benjamin Franklin Pkwy, Philadelphia",
+    "neighborhood": "fairmount",
     "url": "https://www.barnesfoundation.org/",
     "howToClaim": "Choose the student ticket and show your PennCard at entry.",
-    "category": "culture"
+    "category": "culture",
+    "pennSpecific": false
   },
   {
     "slug": "mutter-museum",
@@ -212,9 +238,11 @@
     "title": "Student admission",
     "discount": "Discounted admission with a student ID",
     "location": "19 S 22nd St, Philadelphia",
+    "neighborhood": "rittenhouse",
     "url": "https://muttermuseum.org/",
     "howToClaim": "Choose the student ticket and show your PennCard at entry.",
-    "category": "culture"
+    "category": "culture",
+    "pennSpecific": false
   },
   {
     "slug": "eastern-state-penitentiary",
@@ -223,8 +251,10 @@
     "title": "Student admission",
     "discount": "Discounted admission with a student ID",
     "location": "2027 Fairmount Ave, Philadelphia",
+    "neighborhood": "fairmount",
     "url": "https://www.easternstate.org/",
     "howToClaim": "Choose the student ticket and show your PennCard at entry.",
-    "category": "culture"
+    "category": "culture",
+    "pennSpecific": false
   }
 ]

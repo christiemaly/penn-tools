@@ -5,7 +5,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { AIProvider } from "@penntools/core/ai";
-import type { Discount, DiscountCategory, DiscountKind } from "@penntools/tool-student-discount-maximizer";
+import type {
+  Discount,
+  DiscountAudience,
+  DiscountCategory,
+  DiscountKind,
+  Neighborhood,
+} from "@penntools/tool-student-discount-maximizer";
 import { castVote, expireDeal, loadDiscounts, restoreDeal, type ActionResult, type Filters } from "./actions";
 import { AddDiscountForm, type FormLimits } from "./AddDiscountForm";
 import styles from "./DiscountBoard.module.css";
@@ -15,7 +21,13 @@ export interface Option<T extends string> {
   label: string;
 }
 
-const SIGN_IN_HINT = "Sign in with the button at the top right to vote, add deals or mark them expired.";
+const AUDIENCES: { value: DiscountAudience | null; label: string }[] = [
+  { value: null, label: "All deals" },
+  { value: "penn", label: "Penn-specific" },
+  { value: "general", label: "General" },
+];
+
+const SIGN_IN_HINT ="Sign in with the button at the top right to vote, add deals or mark them expired.";
 
 /** Runs a server action; if the call itself fails (e.g. offline), that's an error too. */
 async function call<T>(action: () => Promise<ActionResult<T>>): Promise<ActionResult<T>> {
@@ -33,6 +45,7 @@ export function DiscountBoard({
   providerLabels,
   kinds,
   categories,
+  neighborhoods,
   limits,
 }: {
   initialDeals: Discount[];
@@ -42,11 +55,15 @@ export function DiscountBoard({
   providerLabels: Record<AIProvider, string>;
   kinds: Option<DiscountKind>[];
   categories: Option<DiscountCategory>[];
+  /** In the order local spots are grouped. */
+  neighborhoods: Option<Neighborhood>[];
   limits: FormLimits;
 }) {
   const [deals, setDeals] = useState(initialDeals);
   const [kind, setKind] = useState<DiscountKind | null>(null);
   const [category, setCategory] = useState<DiscountCategory | null>(null);
+  const [neighborhood, setNeighborhood] = useState<Neighborhood | null>(null);
+  const [audience, setAudience] = useState<DiscountAudience | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<Filters["sort"]>("top");
   const [loading, setLoading] = useState(false);
@@ -57,6 +74,22 @@ export function DiscountBoard({
 
   const kindLabels = Object.fromEntries(kinds.map((k) => [k.value, k.label])) as Record<DiscountKind, string>;
   const categoryLabels = Object.fromEntries(categories.map((c) => [c.value, c.label])) as Record<DiscountCategory, string>;
+  const neighborhoodLabels = Object.fromEntries(neighborhoods.map((n) => [n.value, n.label])) as Record<Neighborhood, string>;
+
+  const activeCard = (deal: Discount) => (
+    <DealCard
+      key={deal.id}
+      deal={deal}
+      kindLabel={kindLabels[deal.kind]}
+      categoryLabel={categoryLabels[deal.category]}
+      neighborhoodLabel={deal.neighborhood ? neighborhoodLabels[deal.neighborhood] : null}
+      signedIn={signedIn}
+      onVote={(works) => act(() => castVote(deal.id, works))}
+      onExpire={() => {
+        if (confirm(`Move "${deal.business}: ${deal.title}" to Expired?`)) void act(() => expireDeal(deal.id));
+      }}
+    />
+  );
 
   // Reload when the filters change, waiting for typing to pause; only the
   // latest request's answer is shown.
@@ -70,7 +103,9 @@ export function DiscountBoard({
     const request = ++latest.current;
     const timer = setTimeout(async () => {
       setLoading(true);
-      const result = await call(() => loadDiscounts({ status: "active", kind, category, search, sort }));
+      const result = await call(() =>
+        loadDiscounts({ status: "active", kind, category, audience, neighborhood, search, sort }),
+      );
       if (request !== latest.current) return;
       setLoading(false);
       if (result.ok) {
@@ -81,11 +116,19 @@ export function DiscountBoard({
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [kind, category, search, sort]);
+  }, [kind, category, audience, neighborhood, search, sort]);
 
   async function loadExpired() {
     const result = await call(() =>
-      loadDiscounts({ status: "expired", kind: null, category: null, search: "", sort: "new" }),
+      loadDiscounts({
+        status: "expired",
+        kind: null,
+        category: null,
+        audience: null,
+        neighborhood: null,
+        search: "",
+        sort: "new",
+      }),
     );
     if (result.ok) setExpired(result.data);
     else setError(result.error.message);
@@ -147,6 +190,7 @@ export function DiscountBoard({
           providerLabels={providerLabels}
           kinds={kinds}
           categories={categories}
+          neighborhoods={neighborhoods}
           limits={limits}
           onAdded={(deal) => {
             applyChange(deal);
@@ -156,6 +200,19 @@ export function DiscountBoard({
       )}
 
       <div className={styles.filters}>
+        <div className={styles.segmented} role="tablist" aria-label="Who the deal is for">
+          {AUDIENCES.map((a) => (
+            <button
+              key={a.label}
+              role="tab"
+              aria-selected={audience === a.value}
+              className={audience === a.value ? styles.segmentActive : styles.segment}
+              onClick={() => setAudience(a.value)}
+            >
+              {a.label}
+            </button>
+          ))}
+        </div>
         <div className={styles.tabs} role="tablist" aria-label="Kind of deal">
           {[{ value: null, label: "All" }, ...kinds].map((k) => (
             <button
@@ -163,7 +220,10 @@ export function DiscountBoard({
               role="tab"
               aria-selected={kind === k.value}
               className={kind === k.value ? styles.tabActive : styles.tab}
-              onClick={() => setKind(k.value)}
+              onClick={() => {
+                setKind(k.value);
+                if (k.value !== "local") setNeighborhood(null);
+              }}
             >
               {k.label}
             </button>
@@ -202,25 +262,41 @@ export function DiscountBoard({
             <option value="new">Newest</option>
           </select>
         </div>
+        {kind === "local" && (
+          <select
+            className={styles.select}
+            aria-label="Neighborhood"
+            value={neighborhood ?? ""}
+            onChange={(e) => setNeighborhood((e.target.value || null) as Neighborhood | null)}
+          >
+            <option value="">All neighborhoods</option>
+            {neighborhoods.map((n) => (
+              <option key={n.value} value={n.value}>
+                {n.label}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {error && <p className={styles.error}>{error}</p>}
 
       <div className={styles.list} aria-busy={loading}>
         {deals.length === 0 && !loading && <p className={styles.empty}>No deals match. Try other filters.</p>}
-        {deals.map((deal) => (
-          <DealCard
-            key={deal.id}
-            deal={deal}
-            kindLabel={kindLabels[deal.kind]}
-            categoryLabel={categoryLabels[deal.category]}
-            signedIn={signedIn}
-            onVote={(works) => act(() => castVote(deal.id, works))}
-            onExpire={() => {
-              if (confirm(`Move "${deal.business}: ${deal.title}" to Expired?`)) void act(() => expireDeal(deal.id));
-            }}
-          />
-        ))}
+        {kind === "local"
+          ? // Local spots are grouped by neighborhood, campus first.
+            neighborhoods.map((n) => {
+              const here = deals.filter((d) => d.neighborhood === n.value);
+              return (
+                here.length > 0 && (
+                  <section key={n.value} className={styles.group}>
+                    <h2 className={styles.groupTitle}>{n.label}</h2>
+                    {here.map(activeCard)}
+                  </section>
+                )
+              );
+            })
+          : deals.map(activeCard)}
       </div>
 
       <section className={styles.expiredSection}>
@@ -237,6 +313,7 @@ export function DiscountBoard({
                 deal={deal}
                 kindLabel={kindLabels[deal.kind]}
                 categoryLabel={categoryLabels[deal.category]}
+                neighborhoodLabel={deal.neighborhood ? neighborhoodLabels[deal.neighborhood] : null}
                 signedIn={signedIn}
                 onRestore={() => act(() => restoreDeal(deal.id))}
               />
@@ -252,6 +329,7 @@ function DealCard({
   deal,
   kindLabel,
   categoryLabel,
+  neighborhoodLabel,
   signedIn,
   onVote,
   onExpire,
@@ -260,6 +338,7 @@ function DealCard({
   deal: Discount;
   kindLabel: string;
   categoryLabel: string;
+  neighborhoodLabel: string | null;
   signedIn: boolean;
   onVote?: (works: boolean | null) => Promise<void>;
   onExpire?: () => void;
@@ -297,6 +376,11 @@ function DealCard({
       <div className={styles.cardTop}>
         <span className={styles.business}>{deal.business}</span>
         <span className={styles.badges}>
+          {deal.pennSpecific && (
+            <span className={styles.badgePenn} title="Only for Penn students">
+              Penn only
+            </span>
+          )}
           <span className={styles.badge}>{kindLabel}</span>
           <span className={styles.badge}>{categoryLabel}</span>
           {deal.source === "starter" && !expired && (
@@ -317,7 +401,20 @@ function DealCard({
           </button>
         </div>
       )}
-      {deal.location && <p className={styles.detail}>📍 {deal.location}</p>}
+      {deal.location && (
+        <p className={styles.detail}>
+          📍 {neighborhoodLabel && <strong>{neighborhoodLabel} · </strong>}
+          {deal.location}
+          {deal.mapsUrl && (
+            <>
+              {" "}
+              <a className={styles.link} href={deal.mapsUrl} target="_blank" rel="noopener noreferrer">
+                Open in Google Maps ↗
+              </a>
+            </>
+          )}
+        </p>
+      )}
       {deal.howToClaim && <p className={styles.detail}>{deal.howToClaim}</p>}
       {deal.url && (
         <a className={styles.link} href={deal.url} target="_blank" rel="noopener noreferrer nofollow">

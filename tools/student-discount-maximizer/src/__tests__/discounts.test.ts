@@ -14,6 +14,7 @@ import {
   addDiscount,
   checkNewDiscount,
   listDiscounts,
+  mapsUrl,
   markExpired,
   restore,
   vote,
@@ -45,6 +46,24 @@ const DEAL = {
   category: "food",
 };
 
+const LOCAL = {
+  ...DEAL,
+  kind: "local",
+  code: null,
+  location: "3601 Walnut St",
+  neighborhood: "university-city",
+};
+
+describe("mapsUrl", () => {
+  it("links to a Google Maps search for the spot, in Philadelphia", () => {
+    expect(mapsUrl("Test Bagels", "3601 Walnut St")).toBe(
+      "https://www.google.com/maps/search/?api=1&query=Test%20Bagels%2C%203601%20Walnut%20St%2C%20Philadelphia%2C%20PA",
+    );
+    expect(mapsUrl("Penn Museum", "3260 South St, Philadelphia")).toContain("3260%20South%20St%2C%20Philadelphia");
+    expect(mapsUrl("Penn Museum", "3260 South St, Philadelphia")).not.toContain("PA");
+  });
+});
+
 describe("checkNewDiscount", () => {
   it("accepts a complete deal and trims it", () => {
     expect(checkNewDiscount({ ...DEAL, business: "  Test Bagels  ", location: "" })).toMatchObject({
@@ -55,9 +74,16 @@ describe("checkNewDiscount", () => {
 
   it("requires a code for promo codes, a location for local spots and a web link otherwise", () => {
     expect(() => checkNewDiscount({ ...DEAL, code: "" })).toThrow("Enter code.");
-    expect(() => checkNewDiscount({ ...DEAL, kind: "local", location: " " })).toThrow("Enter location.");
-    expect(checkNewDiscount({ ...DEAL, kind: "local", location: "3601 Walnut St", url: "" }).url).toBeNull();
+    expect(() => checkNewDiscount({ ...LOCAL, location: " " })).toThrow("Enter location.");
+    expect(checkNewDiscount({ ...LOCAL, url: "" }).url).toBeNull();
     expect(() => checkNewDiscount({ ...DEAL, url: "" })).toThrow("Enter link.");
+  });
+
+  it("requires a known neighborhood for local spots, and drops it for other deals", () => {
+    expect(checkNewDiscount(LOCAL).neighborhood).toBe("university-city");
+    expect(() => checkNewDiscount({ ...LOCAL, neighborhood: null })).toThrow("Choose the spot's neighborhood.");
+    expect(() => checkNewDiscount({ ...LOCAL, neighborhood: "narnia" })).toThrow("Choose the spot's neighborhood.");
+    expect(checkNewDiscount({ ...DEAL, neighborhood: "old-city" }).neighborhood).toBeNull();
   });
 
   it("rejects links that aren't web addresses", () => {
@@ -109,17 +135,63 @@ describe.skipIf(!databaseUrl)("Student Discount Central storage (Postgres)", () 
     await restore(sql, "alice", starters[0]!.id);
   });
 
+  it("applies edits to starter deals from the file, keeping their votes and status", async () => {
+    const { default: seed } = await import(seedUrl.href);
+    const [deal] = await listDiscounts(sql, { userId: null, status: "active", search: "Penn Museum" });
+    await vote(sql, "kim", deal!.id, true);
+    await sql`UPDATE discounts SET title = 'Old title', penn_specific = false WHERE id = ${deal!.id}`;
+
+    await seed({ sql });
+    const [reseeded] = await listDiscounts(sql, { userId: "kim", status: "active", search: "Penn Museum" });
+    expect(reseeded).toMatchObject({ title: deal!.title, pennSpecific: true, works: 1, myVote: true });
+  });
+
+  it("filters local spots by neighborhood, each with a maps link", async () => {
+    const spot = await addDiscount(sql, "lee", {
+      ...LOCAL,
+      business: "Zqy Cafe",
+      title: "Cookie with any coffee",
+      discount: "Free cookie",
+      category: "other",
+      neighborhood: "old-city",
+      location: "1 Market St",
+    });
+    expect(spot).toMatchObject({ neighborhood: "old-city", mapsUrl: mapsUrl("Zqy Cafe", "1 Market St") });
+
+    const oldCity = await listDiscounts(sql, { userId: null, status: "active", neighborhood: "old-city" });
+    expect(oldCity.map((d) => d.id)).toEqual([spot.id]);
+    const uCity = await listDiscounts(sql, { userId: null, status: "active", neighborhood: "university-city" });
+    expect(uCity.map((d) => d.business)).toContain("Penn Museum");
+    expect(uCity.every((d) => d.kind === "local" && d.neighborhood === "university-city" && d.mapsUrl)).toBe(true);
+
+    const [online] = await listDiscounts(sql, { userId: null, status: "active", search: "Spotify" });
+    expect(online).toMatchObject({ neighborhood: null, mapsUrl: null });
+  });
+
+  it("filters Penn-specific and general deals", async () => {
+    const penn = await listDiscounts(sql, { userId: null, status: "active", audience: "penn" });
+    const general = await listDiscounts(sql, { userId: null, status: "active", audience: "general" });
+    expect(penn.map((d) => d.business)).toContain("Penn Museum");
+    expect(penn.every((d) => d.pennSpecific)).toBe(true);
+    expect(general.map((d) => d.business)).toContain("Spotify");
+    expect(general.every((d) => !d.pennSpecific)).toBe(true);
+  });
+
   it("adds a student's deal and filters by kind, category and search", async () => {
     const added = await addDiscount(sql, "bob", DEAL);
-    expect(added).toMatchObject({ source: "student", status: "active", works: 0, notWorking: 0, myVote: null });
+    expect(added).toMatchObject({ source: "student", status: "active", pennSpecific: false, works: 0, notWorking: 0, myVote: null });
 
     const ids = async (options: Parameters<typeof listDiscounts>[1]) => (await listDiscounts(sql, options)).map((d) => d.id);
-    expect(await ids({ userId: null, status: "active", kind: "code" })).toEqual([added.id]);
-    expect(await ids({ userId: null, status: "active", category: "food" })).toEqual([added.id]);
-    expect(await ids({ userId: null, status: "active", search: "bagel" })).toEqual([added.id]);
+    expect(await ids({ userId: null, status: "active", kind: "code", audience: "general" })).toEqual([added.id]);
+    expect(await ids({ userId: null, status: "active", category: "food", audience: "general" })).toEqual([added.id]);
+    expect(await ids({ userId: null, status: "active", search: "bagel", audience: "general" })).toEqual([added.id]);
     expect(await ids({ userId: null, status: "active", search: "37%" })).toEqual([added.id]);
     expect(await ids({ userId: null, status: "active", search: "100%" })).toEqual([]);
     expect(await ids({ userId: null, status: "expired" })).not.toContain(added.id);
+
+    const pennOnly = await addDiscount(sql, "bob", { ...DEAL, title: "Penn only", pennSpecific: true });
+    expect(pennOnly.pennSpecific).toBe(true);
+    expect(await ids({ userId: null, status: "active", search: "bagel", audience: "penn" })).toEqual([pennOnly.id]);
   });
 
   it("keeps one vote per student, which they can change or take back", async () => {

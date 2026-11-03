@@ -30,9 +30,11 @@ const EMPTY_DRAFT = {
   discount: null,
   code: null,
   location: null,
+  neighborhood: null,
   url: null,
   howToClaim: null,
   category: null,
+  pennSpecific: null,
 };
 
 describe("fillFromText", () => {

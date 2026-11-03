@@ -32,8 +32,34 @@ export const CATEGORY_LABELS: Record<DiscountCategory, string> = {
   other: "Other",
 };
 
+/** Where a local spot is, in the order the page groups them: campus first. */
+export const NEIGHBORHOODS = [
+  "university-city",
+  "center-city",
+  "rittenhouse",
+  "old-city",
+  "fairmount",
+  "south-philly",
+  "fishtown",
+  "other",
+] as const;
+export type Neighborhood = (typeof NEIGHBORHOODS)[number];
+
+export const NEIGHBORHOOD_LABELS: Record<Neighborhood, string> = {
+  "university-city": "University City",
+  "center-city": "Center City",
+  rittenhouse: "Rittenhouse",
+  "old-city": "Old City",
+  fairmount: "Fairmount / Art Museum",
+  "south-philly": "South Philly",
+  fishtown: "Fishtown / Northern Liberties",
+  other: "Other Philly",
+};
+
 export type DiscountStatus = "active" | "expired";
 export type DiscountSort = "top" | "new";
+/** Penn-specific deals are only for Penn students (PennCard perks, Penn-only prices); general ones are for any student. */
+export type DiscountAudience = "penn" | "general";
 
 /** Most deals a student can add in a day, to keep spam down. */
 export const DAILY_SUBMISSION_LIMIT = 20;
@@ -60,9 +86,15 @@ export interface Discount {
   discount: string;
   code: string | null;
   location: string | null;
+  /** Local spots only. */
+  neighborhood: Neighborhood | null;
+  /** A Google Maps link to the spot, for local spots with a location. */
+  mapsUrl: string | null;
   url: string | null;
   howToClaim: string;
   category: DiscountCategory;
+  /** Only for Penn students, rather than any student. */
+  pennSpecific: boolean;
   source: "starter" | "student";
   status: DiscountStatus;
   /** Why it expired: a student marked it, or votes did. Null while active. */
@@ -84,9 +116,11 @@ export interface NewDiscount {
   discount: string;
   code: string | null;
   location: string | null;
+  neighborhood: Neighborhood | null;
   url: string | null;
   howToClaim: string;
   category: DiscountCategory;
+  pennSpecific: boolean;
 }
 
 export interface ListOptions {
@@ -95,6 +129,9 @@ export interface ListOptions {
   status: DiscountStatus;
   kind?: DiscountKind | null;
   category?: DiscountCategory | null;
+  audience?: DiscountAudience | null;
+  /** Only local spots in this neighborhood. */
+  neighborhood?: Neighborhood | null;
   search?: string | null;
   sort?: DiscountSort;
   limit?: number;
@@ -140,6 +177,11 @@ export function checkNewDiscount(input: unknown): NewDiscount {
   if (!KINDS.includes(kind as DiscountKind)) throw new DiscountError("Choose what kind of deal it is.");
   const category = raw["category"];
   if (!CATEGORIES.includes(category as DiscountCategory)) throw new DiscountError("Choose a category.");
+  // Only local spots have a neighborhood; it's ignored for the others.
+  const neighborhood = kind === "local" ? raw["neighborhood"] : null;
+  if (kind === "local" && !NEIGHBORHOODS.includes(neighborhood as Neighborhood)) {
+    throw new DiscountError("Choose the spot's neighborhood.");
+  }
 
   return {
     kind: kind as DiscountKind,
@@ -148,10 +190,12 @@ export function checkNewDiscount(input: unknown): NewDiscount {
     discount: text(raw["discount"], "Discount", LIMITS.discount, true)!,
     code: text(raw["code"], "Code", LIMITS.code, kind === "code"),
     location: text(raw["location"], "Location", LIMITS.location, kind === "local"),
+    neighborhood: neighborhood as Neighborhood | null,
     // Codes and online deals are used on a website; local spots may not have one.
     url: link(raw["url"], kind !== "local"),
     howToClaim: text(raw["howToClaim"], "How to claim", LIMITS.howToClaim, false) ?? "",
     category: category as DiscountCategory,
+    pennSpecific: raw["pennSpecific"] === true,
   };
 }
 
@@ -165,9 +209,11 @@ interface DiscountRow {
   discount: string;
   code: string | null;
   location: string | null;
+  neighborhood: Neighborhood | null;
   url: string | null;
   how_to_claim: string;
   category: DiscountCategory;
+  penn_specific: boolean;
   source: "starter" | "student";
   status: DiscountStatus;
   expired_reason: "marked" | "votes" | null;
@@ -187,9 +233,12 @@ function toDiscount(row: DiscountRow): Discount {
     discount: row.discount,
     code: row.code,
     location: row.location,
+    neighborhood: row.neighborhood,
+    mapsUrl: row.kind === "local" && row.location ? mapsUrl(row.business, row.location) : null,
     url: row.url,
     howToClaim: row.how_to_claim,
     category: row.category,
+    pennSpecific: row.penn_specific,
     source: row.source,
     status: row.status,
     expiredReason: row.expired_reason,
@@ -201,6 +250,15 @@ function toDiscount(row: DiscountRow): Discount {
   };
 }
 
+/**
+ * A Google Maps search for the spot, which opens the place (or the Maps app on
+ * a phone). A plain link: no API key, nothing embedded.
+ */
+export function mapsUrl(business: string, location: string): string {
+  const place = /philadelphia/i.test(location) ? location : `${location}, Philadelphia, PA`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business}, ${place}`)}`;
+}
+
 /** Escapes LIKE wildcards so a search for "50%" finds the text "50%". */
 function likePattern(search: string): string {
   return `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -208,7 +266,7 @@ function likePattern(search: string): string {
 
 /** Deals matching the filters, each with its vote counts and the student's own vote. */
 export async function listDiscounts(sql: Sql, options: ListOptions): Promise<Discount[]> {
-  const { userId, status, kind, category, sort = "top", limit = 200 } = options;
+  const { userId, status, kind, category, audience, neighborhood, sort = "top", limit = 200 } = options;
   const search = options.search?.trim().slice(0, LIMITS.search);
   const pattern = search ? likePattern(search) : null;
 
@@ -220,8 +278,8 @@ export async function listDiscounts(sql: Sql, options: ListOptions): Promise<Dis
         : sql`COUNT(v.user_id) FILTER (WHERE v.works) - COUNT(v.user_id) FILTER (WHERE NOT v.works) DESC, d.created_at DESC`;
 
   const rows = await sql<DiscountRow[]>`
-    SELECT d.id, d.kind, d.business, d.title, d.discount, d.code, d.location, d.url,
-           d.how_to_claim, d.category, d.source, d.status, d.expired_reason,
+    SELECT d.id, d.kind, d.business, d.title, d.discount, d.code, d.location, d.neighborhood, d.url,
+           d.how_to_claim, d.category, d.penn_specific, d.source, d.status, d.expired_reason,
            d.status_changed_at, d.created_at,
            COUNT(v.user_id) FILTER (WHERE v.works) AS works,
            COUNT(v.user_id) FILTER (WHERE NOT v.works) AS not_working,
@@ -231,6 +289,8 @@ export async function listDiscounts(sql: Sql, options: ListOptions): Promise<Dis
     WHERE d.status = ${status}
       ${kind ? sql`AND d.kind = ${kind}` : sql``}
       ${category ? sql`AND d.category = ${category}` : sql``}
+      ${audience ? sql`AND d.penn_specific = ${audience === "penn"}` : sql``}
+      ${neighborhood ? sql`AND d.kind = 'local' AND d.neighborhood = ${neighborhood}` : sql``}
       ${
         pattern
           ? sql`AND (d.business ILIKE ${pattern} OR d.title ILIKE ${pattern}
@@ -248,8 +308,8 @@ export async function listDiscounts(sql: Sql, options: ListOptions): Promise<Dis
 export async function getDiscount(sql: Sql, id: string, userId: string | null): Promise<Discount | null> {
   if (!UUID_RE.test(id)) return null;
   const [row] = await sql<DiscountRow[]>`
-    SELECT d.id, d.kind, d.business, d.title, d.discount, d.code, d.location, d.url,
-           d.how_to_claim, d.category, d.source, d.status, d.expired_reason,
+    SELECT d.id, d.kind, d.business, d.title, d.discount, d.code, d.location, d.neighborhood, d.url,
+           d.how_to_claim, d.category, d.penn_specific, d.source, d.status, d.expired_reason,
            d.status_changed_at, d.created_at,
            COUNT(v.user_id) FILTER (WHERE v.works) AS works,
            COUNT(v.user_id) FILTER (WHERE NOT v.works) AS not_working,
@@ -276,9 +336,10 @@ export async function addDiscount(sql: Sql, userId: string, input: unknown): Pro
   }
 
   const [row] = await sql<{ id: string }[]>`
-    INSERT INTO discounts (kind, business, title, discount, code, location, url, how_to_claim, category, source, created_by)
+    INSERT INTO discounts (kind, business, title, discount, code, location, neighborhood, url, how_to_claim,
+                           category, penn_specific, source, created_by)
     VALUES (${deal.kind}, ${deal.business}, ${deal.title}, ${deal.discount}, ${deal.code}, ${deal.location},
-            ${deal.url}, ${deal.howToClaim}, ${deal.category}, 'student', ${userId})
+            ${deal.neighborhood}, ${deal.url}, ${deal.howToClaim}, ${deal.category}, ${deal.pennSpecific}, 'student', ${userId})
     RETURNING id
   `;
   return (await getDiscount(sql, row!.id, userId))!;
