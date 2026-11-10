@@ -203,15 +203,19 @@ function link(value: unknown, required: boolean): string | null {
   return url;
 }
 
-/** A positive number from the form (which sends text), or null when empty. */
+/**
+ * A positive number from the form (which sends text, maybe with "$" or "%"),
+ * or null when empty: blank, or only symbols, counts as empty.
+ */
 function amountOf(value: unknown, dealType: DealType): number | null {
-  if (value === null || value === undefined || value === "") {
+  const digits = typeof value === "number" ? String(value) : String(value ?? "").replace(/[$%,\s]/g, "");
+  if (!digits) {
     if (DEAL_TYPES_NEEDING_AMOUNT.includes(dealType)) {
       throw new DiscountError(dealType === "percent" ? "Enter the percentage off." : "Enter how many dollars off.");
     }
     return null;
   }
-  const amount = typeof value === "number" ? value : Number(String(value).replace(/[$%,\s]/g, ""));
+  const amount = Number(digits);
   if (!Number.isFinite(amount) || amount <= 0) throw new DiscountError("Enter the amount as a number, like 20.");
   if (dealType === "percent" && amount > 100) throw new DiscountError("A percentage off can't be more than 100.");
   if (amount >= 100000) throw new DiscountError("That amount looks too large.");
@@ -226,7 +230,7 @@ export function checkNewDiscount(input: unknown): NewDiscount {
   const dealType = raw["dealType"];
   if (!DEAL_TYPES.includes(dealType as DealType)) throw new DiscountError("Choose what kind of deal it is.");
   // Optional, with defaults: most deals students add are in person.
-  const kind = raw["kind"] ?? "local";
+  const kind = raw["kind"] || "local";
   if (!KINDS.includes(kind as DiscountKind)) throw new DiscountError("Choose where the deal is used.");
   const category = raw["category"] || "other";
   if (!CATEGORIES.includes(category as DiscountCategory)) throw new DiscountError("Choose a category.");
