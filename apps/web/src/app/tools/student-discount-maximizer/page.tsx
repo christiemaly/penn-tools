@@ -33,7 +33,8 @@ export default async function StudentDiscountCentralPage() {
 
   let initialDeals;
   try {
-    initialDeals = await listDiscounts(sql, { userId: user?.id ?? null, status: "active" });
+    // Alphabetical, matching the board's default sort.
+    initialDeals = await listDiscounts(sql, { userId: user?.id ?? null, status: "active", sort: "az" });
   } catch (error) {
     const problem = setupProblem(error);
     if (!problem) throw error;

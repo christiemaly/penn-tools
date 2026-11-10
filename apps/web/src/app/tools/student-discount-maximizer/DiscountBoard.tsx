@@ -65,7 +65,7 @@ export function DiscountBoard({
   const [neighborhood, setNeighborhood] = useState<Neighborhood | null>(null);
   const [audience, setAudience] = useState<DiscountAudience | null>(null);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState<Filters["sort"]>("top");
+  const [sort, setSort] = useState<Filters["sort"]>("az");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -258,6 +258,7 @@ export function DiscountBoard({
             value={sort}
             onChange={(e) => setSort(e.target.value as Filters["sort"])}
           >
+            <option value="az">A–Z</option>
             <option value="top">Most trusted</option>
             <option value="new">Newest</option>
           </select>

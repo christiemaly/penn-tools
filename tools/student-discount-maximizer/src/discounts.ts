@@ -57,7 +57,8 @@ export const NEIGHBORHOOD_LABELS: Record<Neighborhood, string> = {
 };
 
 export type DiscountStatus = "active" | "expired";
-export type DiscountSort = "top" | "new";
+/** "az": by business, then title; "top": most "works" votes net of "doesn't work"; "new": newest first. */
+export type DiscountSort = "az" | "top" | "new";
 /** Penn-specific deals are only for Penn students (PennCard perks, Penn-only prices); general ones are for any student. */
 export type DiscountAudience = "penn" | "general";
 
@@ -275,7 +276,9 @@ export async function listDiscounts(sql: Sql, options: ListOptions): Promise<Dis
       ? sql`d.status_changed_at DESC`
       : sort === "new"
         ? sql`d.created_at DESC`
-        : sql`COUNT(v.user_id) FILTER (WHERE v.works) - COUNT(v.user_id) FILTER (WHERE NOT v.works) DESC, d.created_at DESC`;
+        : sort === "az"
+          ? sql`LOWER(d.business), LOWER(d.title), d.created_at DESC`
+          : sql`COUNT(v.user_id) FILTER (WHERE v.works) - COUNT(v.user_id) FILTER (WHERE NOT v.works) DESC, d.created_at DESC`;
 
   const rows = await sql<DiscountRow[]>`
     SELECT d.id, d.kind, d.business, d.title, d.discount, d.code, d.location, d.neighborhood, d.url,

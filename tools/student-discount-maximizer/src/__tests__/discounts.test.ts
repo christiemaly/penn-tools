@@ -209,6 +209,16 @@ describe.skipIf(!databaseUrl)("Student Discount Central storage (Postgres)", () 
     expect(seenSignedOut?.myVote).toBeNull();
   });
 
+  it("sorts A–Z by business, ignoring case, then by title", async () => {
+    await addDiscount(sql, "mo", { ...DEAL, business: "zqw beta", title: "Second" });
+    await addDiscount(sql, "mo", { ...DEAL, business: "Zqw Alpha", title: "B deal" });
+    await addDiscount(sql, "mo", { ...DEAL, business: "Zqw Alpha", title: "A deal" });
+    const sorted = (await listDiscounts(sql, { userId: null, status: "active", search: "Zqw", sort: "az" })).map(
+      (d) => `${d.business}: ${d.title}`,
+    );
+    expect(sorted).toEqual(["Zqw Alpha: A deal", "Zqw Alpha: B deal", "zqw beta: Second"]);
+  });
+
   it("ranks deals by works minus doesn't-work votes", async () => {
     const low = await addDiscount(sql, "erin", { ...DEAL, business: "Zqx Low" });
     const high = await addDiscount(sql, "erin", { ...DEAL, business: "Zqx High" });

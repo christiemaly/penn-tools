@@ -26,6 +26,7 @@ import {
   type DiscountAudience,
   type DiscountCategory,
   type DiscountKind,
+  type DiscountSort,
   type DealDraft,
   type Neighborhood,
 } from "@penntools/tool-student-discount-maximizer";
@@ -48,7 +49,7 @@ export interface Filters {
   audience: DiscountAudience | null;
   neighborhood: Neighborhood | null;
   search: string;
-  sort: "top" | "new";
+  sort: DiscountSort;
 }
 
 const signedOut: ActionResult<never> = {
@@ -91,7 +92,7 @@ export async function loadDiscounts(filters: Filters): Promise<ActionResult<Disc
       audience: f.audience === "penn" || f.audience === "general" ? f.audience : null,
       neighborhood: NEIGHBORHOODS.includes(f.neighborhood as Neighborhood) ? (f.neighborhood as Neighborhood) : null,
       search: typeof f.search === "string" ? f.search : null,
-      sort: f.sort === "new" ? "new" : "top",
+      sort: f.sort === "new" || f.sort === "top" ? f.sort : "az",
     }),
   );
 }
