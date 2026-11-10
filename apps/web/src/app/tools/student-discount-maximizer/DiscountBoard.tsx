@@ -13,7 +13,7 @@ import type {
   Neighborhood,
 } from "@penntools/tool-student-discount-maximizer";
 import { castVote, expireDeal, loadDiscounts, restoreDeal, type ActionResult, type Filters } from "./actions";
-import { AddDiscountForm, type FormLimits } from "./AddDiscountForm";
+import { AddDiscountForm, type DealTypeOption, type FormLimits } from "./AddDiscountForm";
 import styles from "./DiscountBoard.module.css";
 
 export interface Option<T extends string> {
@@ -46,6 +46,7 @@ export function DiscountBoard({
   kinds,
   categories,
   neighborhoods,
+  dealTypes,
   limits,
 }: {
   initialDeals: Discount[];
@@ -57,6 +58,7 @@ export function DiscountBoard({
   categories: Option<DiscountCategory>[];
   /** In the order local spots are grouped. */
   neighborhoods: Option<Neighborhood>[];
+  dealTypes: DealTypeOption[];
   limits: FormLimits;
 }) {
   const [deals, setDeals] = useState(initialDeals);
@@ -188,7 +190,7 @@ export function DiscountBoard({
         <AddDiscountForm
           providers={providers}
           providerLabels={providerLabels}
-          kinds={kinds}
+          dealTypes={dealTypes}
           categories={categories}
           neighborhoods={neighborhoods}
           limits={limits}
@@ -285,12 +287,12 @@ export function DiscountBoard({
       <div className={styles.list} aria-busy={loading}>
         {deals.length === 0 && !loading && <p className={styles.empty}>No deals match. Try other filters.</p>}
         {kind === "local"
-          ? // Local spots are grouped by neighborhood, campus first.
-            neighborhoods.map((n) => {
+          ? // Local spots are grouped by neighborhood, campus first; spots without one come last.
+            [...neighborhoods, { value: null, label: "Neighborhood not given" }].map((n) => {
               const here = deals.filter((d) => d.neighborhood === n.value);
               return (
                 here.length > 0 && (
-                  <section key={n.value} className={styles.group}>
+                  <section key={n.value ?? "none"} className={styles.group}>
                     <h2 className={styles.groupTitle}>{n.label}</h2>
                     {here.map(activeCard)}
                   </section>
@@ -391,8 +393,10 @@ function DealCard({
           )}
         </span>
       </div>
-      <h2 className={styles.cardTitle}>{deal.title}</h2>
-      <p className={styles.discount}>{deal.discount}</p>
+      {/* The headline is the deal itself ("20% off bowls"), unless the deal has its own title. */}
+      <h2 className={styles.cardTitle}>{deal.title ?? deal.summary}</h2>
+      {deal.title && <p className={styles.discount}>{deal.summary}</p>}
+      {deal.discount && deal.discount !== deal.summary && <p className={styles.detail}>{deal.discount}</p>}
 
       {deal.code && (
         <div className={styles.codeRow}>

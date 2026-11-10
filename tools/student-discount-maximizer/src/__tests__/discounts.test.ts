@@ -13,6 +13,8 @@ import {
   DiscountError,
   addDiscount,
   checkNewDiscount,
+  dealSummary,
+  type DealType,
   listDiscounts,
   mapsUrl,
   markExpired,
@@ -38,6 +40,9 @@ const DEAL = {
   kind: "code",
   business: "Test Bagels",
   title: "Bagel deal",
+  dealType: "percent",
+  amount: "37",
+  appliesTo: null,
   discount: "37% off",
   code: "PENN37",
   location: null,
@@ -64,6 +69,27 @@ describe("mapsUrl", () => {
   });
 });
 
+describe("dealSummary", () => {
+  const summary = (dealType: DealType | null, amount: number | null, appliesTo: string | null, discount = "") =>
+    dealSummary({ dealType, amount, appliesTo, discount });
+
+  it("builds a headline from the deal type", () => {
+    expect(summary("percent", 20, "bowls")).toBe("20% off bowls");
+    expect(summary("percent", 15, null)).toBe("15% off everything");
+    expect(summary("amount", 4.5, null)).toBe("$4.50 off");
+    expect(summary("bogo", null, "cookies")).toBe("Buy one, get one free: cookies");
+    expect(summary("bogo", null, null)).toBe("Buy one, get one free");
+    expect(summary("free_item", null, "admission")).toBe("Free admission");
+    expect(summary("student_price", 5, "tickets")).toBe("$5 student price for tickets");
+    expect(summary("student_price", null, null)).toBe("Student price");
+  });
+
+  it("uses the details for other and older deals", () => {
+    expect(summary("other", null, null, "Free coffee refills")).toBe("Free coffee refills");
+    expect(summary(null, null, null, "50% off")).toBe("50% off");
+  });
+});
+
 describe("checkNewDiscount", () => {
   it("accepts a complete deal and trims it", () => {
     expect(checkNewDiscount({ ...DEAL, business: "  Test Bagels  ", location: "" })).toMatchObject({
@@ -72,17 +98,48 @@ describe("checkNewDiscount", () => {
     });
   });
 
-  it("requires a code for promo codes, a location for local spots and a web link otherwise", () => {
-    expect(() => checkNewDiscount({ ...DEAL, code: "" })).toThrow("Enter code.");
-    expect(() => checkNewDiscount({ ...LOCAL, location: " " })).toThrow("Enter location.");
-    expect(checkNewDiscount({ ...LOCAL, url: "" }).url).toBeNull();
-    expect(() => checkNewDiscount({ ...DEAL, url: "" })).toThrow("Enter link.");
+  it("needs only the establishment and the deal type, defaulting to an in-person deal", () => {
+    expect(checkNewDiscount({ business: "Sweetgreen", dealType: "bogo" })).toEqual({
+      kind: "local",
+      business: "Sweetgreen",
+      title: null,
+      dealType: "bogo",
+      amount: null,
+      appliesTo: null,
+      discount: "",
+      code: null,
+      location: null,
+      neighborhood: null,
+      url: null,
+      howToClaim: "",
+      category: "other",
+      pennSpecific: false,
+    });
+    expect(() => checkNewDiscount({ dealType: "bogo" })).toThrow("Enter establishment name.");
+    expect(() => checkNewDiscount({ business: "Sweetgreen" })).toThrow("Choose what kind of deal");
   });
 
-  it("requires a known neighborhood for local spots, and drops it for other deals", () => {
+  it("needs an amount for % off and $ off, and details for other deals", () => {
+    expect(() => checkNewDiscount({ business: "X", dealType: "percent" })).toThrow("Enter the percentage off.");
+    expect(() => checkNewDiscount({ business: "X", dealType: "amount", amount: "" })).toThrow("Enter how many dollars off.");
+    expect(checkNewDiscount({ business: "X", dealType: "percent", amount: "20%" }).amount).toBe(20);
+    expect(checkNewDiscount({ business: "X", dealType: "amount", amount: "$4.5" }).amount).toBe(4.5);
+    expect(checkNewDiscount({ business: "X", dealType: "student_price" }).amount).toBeNull();
+    expect(() => checkNewDiscount({ business: "X", dealType: "percent", amount: "150" })).toThrow("more than 100");
+    expect(() => checkNewDiscount({ business: "X", dealType: "percent", amount: "lots" })).toThrow("as a number");
+    expect(() => checkNewDiscount({ business: "X", dealType: "other" })).toThrow("Enter details.");
+  });
+
+  it("requires a code for promo codes; address, link and neighborhood are optional", () => {
+    expect(() => checkNewDiscount({ ...DEAL, code: "" })).toThrow("Enter code.");
+    expect(checkNewDiscount({ ...LOCAL, location: " ", url: "" })).toMatchObject({ location: null, url: null });
+    expect(checkNewDiscount({ ...DEAL, url: "" }).url).toBeNull();
+    expect(checkNewDiscount({ ...LOCAL, neighborhood: "" }).neighborhood).toBeNull();
+  });
+
+  it("checks the neighborhood for local spots, and drops it for other deals", () => {
     expect(checkNewDiscount(LOCAL).neighborhood).toBe("university-city");
-    expect(() => checkNewDiscount({ ...LOCAL, neighborhood: null })).toThrow("Choose the spot's neighborhood.");
-    expect(() => checkNewDiscount({ ...LOCAL, neighborhood: "narnia" })).toThrow("Choose the spot's neighborhood.");
+    expect(() => checkNewDiscount({ ...LOCAL, neighborhood: "narnia" })).toThrow("Choose a neighborhood from the list.");
     expect(checkNewDiscount({ ...DEAL, neighborhood: "old-city" }).neighborhood).toBeNull();
   });
 
@@ -93,7 +150,8 @@ describe("checkNewDiscount", () => {
   });
 
   it("rejects unknown kinds and categories, and overlong text", () => {
-    expect(() => checkNewDiscount({ ...DEAL, kind: "coupon" })).toThrow("Choose what kind");
+    expect(() => checkNewDiscount({ ...DEAL, kind: "coupon" })).toThrow("Choose where the deal is used");
+    expect(() => checkNewDiscount({ ...DEAL, dealType: "raffle" })).toThrow("Choose what kind of deal");
     expect(() => checkNewDiscount({ ...DEAL, category: "pets" })).toThrow("Choose a category");
     expect(() => checkNewDiscount({ ...DEAL, title: "x".repeat(151) })).toThrow("at most 150");
     expect(() => checkNewDiscount(null)).toThrow(DiscountError);

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS discounts (
   kind              TEXT        NOT NULL CHECK (kind IN ('code', 'online', 'local')),
   business          TEXT        NOT NULL,
   title             TEXT        NOT NULL,
+  -- The deal's details in the student's words; may be empty (see deal_type below).
   discount          TEXT        NOT NULL,
   code              TEXT,
   location          TEXT,
@@ -36,6 +37,16 @@ ALTER TABLE discounts ADD COLUMN IF NOT EXISTS penn_specific BOOLEAN NOT NULL DE
 -- list lives in NEIGHBORHOODS in src/discounts.ts, which checks it, so adding
 -- a neighborhood needs no database change.
 ALTER TABLE discounts ADD COLUMN IF NOT EXISTS neighborhood TEXT;
+
+-- The deal's structure, which makes its headline (dealSummary in src/discounts.ts):
+-- deal_type is one of DEAL_TYPES there (checked in code, like neighborhood),
+-- amount the number for % off, $ off or a student price, and applies_to what
+-- it's for ("bowls"), null for everything. Null deal_type: an older deal,
+-- shown by its details. With these, a title is optional.
+ALTER TABLE discounts ADD COLUMN IF NOT EXISTS deal_type TEXT;
+ALTER TABLE discounts ADD COLUMN IF NOT EXISTS amount NUMERIC(10, 2);
+ALTER TABLE discounts ADD COLUMN IF NOT EXISTS applies_to TEXT;
+ALTER TABLE discounts ALTER COLUMN title DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS discounts_status_idx ON discounts (status, created_at DESC);
 -- The daily submission limit counts a student's recent deals.

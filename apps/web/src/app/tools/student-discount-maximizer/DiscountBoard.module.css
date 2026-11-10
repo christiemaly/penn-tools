@@ -370,6 +370,77 @@
   align-self: auto;
 }
 
+.fieldset {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.legend {
+  margin-bottom: 4px;
+  padding: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--section-label);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Radio buttons styled as pills; the input stays for keyboards and screen readers. */
+.chip,
+.chipActive {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  border: 1px solid var(--input-border);
+  border-radius: 999px;
+  background: var(--bg);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.chip input,
+.chipActive input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.chip:focus-within,
+.chipActive:focus-within {
+  outline: 2px solid var(--penn-blue);
+  outline-offset: 2px;
+}
+.chipActive {
+  border-color: var(--penn-blue);
+  background: var(--penn-blue);
+  color: #fff;
+}
+
+.amount {
+  max-width: 120px;
+}
+
+.more {
+  align-self: stretch;
+}
+.more summary {
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--penn-blue);
+}
+.more[open] summary {
+  margin-bottom: 10px;
+}
+
 .aiBox {
   display: flex;
   flex-direction: column;

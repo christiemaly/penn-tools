@@ -19,7 +19,10 @@ export default async function seed({ sql }) {
     slug: deal.slug,
     kind: deal.kind,
     business: deal.business,
-    title: deal.title,
+    title: deal.title ?? null,
+    deal_type: deal.dealType ?? null,
+    amount: deal.amount ?? null,
+    applies_to: deal.appliesTo ?? null,
     discount: deal.discount,
     code: deal.code ?? null,
     location: deal.location ?? null,
@@ -37,16 +40,17 @@ export default async function seed({ sql }) {
     INSERT INTO discounts ${sql(deals)}
     ON CONFLICT (slug) DO UPDATE SET
       kind = EXCLUDED.kind, business = EXCLUDED.business, title = EXCLUDED.title,
+      deal_type = EXCLUDED.deal_type, amount = EXCLUDED.amount, applies_to = EXCLUDED.applies_to,
       discount = EXCLUDED.discount, code = EXCLUDED.code, location = EXCLUDED.location,
       neighborhood = EXCLUDED.neighborhood, url = EXCLUDED.url, how_to_claim = EXCLUDED.how_to_claim,
       category = EXCLUDED.category, penn_specific = EXCLUDED.penn_specific
-    WHERE (discounts.kind, discounts.business, discounts.title, discounts.discount, discounts.code,
-           discounts.location, discounts.neighborhood, discounts.url, discounts.how_to_claim,
-           discounts.category, discounts.penn_specific)
+    WHERE (discounts.kind, discounts.business, discounts.title, discounts.deal_type, discounts.amount,
+           discounts.applies_to, discounts.discount, discounts.code, discounts.location, discounts.neighborhood,
+           discounts.url, discounts.how_to_claim, discounts.category, discounts.penn_specific)
       IS DISTINCT FROM
-          (EXCLUDED.kind, EXCLUDED.business, EXCLUDED.title, EXCLUDED.discount, EXCLUDED.code,
-           EXCLUDED.location, EXCLUDED.neighborhood, EXCLUDED.url, EXCLUDED.how_to_claim,
-           EXCLUDED.category, EXCLUDED.penn_specific)
+          (EXCLUDED.kind, EXCLUDED.business, EXCLUDED.title, EXCLUDED.deal_type, EXCLUDED.amount,
+           EXCLUDED.applies_to, EXCLUDED.discount, EXCLUDED.code, EXCLUDED.location, EXCLUDED.neighborhood,
+           EXCLUDED.url, EXCLUDED.how_to_claim, EXCLUDED.category, EXCLUDED.penn_specific)
   `;
   if (changed.count > 0) console.log(`  added or updated ${changed.count} starter deals`);
 }

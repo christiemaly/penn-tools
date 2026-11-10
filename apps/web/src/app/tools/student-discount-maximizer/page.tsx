@@ -8,6 +8,9 @@ import type { AIProvider } from "@penntools/core/ai";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
+  DEAL_TYPES,
+  DEAL_TYPES_NEEDING_AMOUNT,
+  DEAL_TYPE_LABELS,
   KINDS,
   KIND_LABELS,
   LIMITS,
@@ -57,6 +60,11 @@ export default async function StudentDiscountCentralPage() {
       kinds={KINDS.map((k) => ({ value: k, label: KIND_LABELS[k] }))}
       categories={CATEGORIES.map((c) => ({ value: c, label: CATEGORY_LABELS[c] }))}
       neighborhoods={NEIGHBORHOODS.map((n) => ({ value: n, label: NEIGHBORHOOD_LABELS[n] }))}
+      dealTypes={DEAL_TYPES.map((t) => ({
+        value: t,
+        label: DEAL_TYPE_LABELS[t],
+        amount: DEAL_TYPES_NEEDING_AMOUNT.includes(t) ? "required" : t === "student_price" ? "optional" : "none",
+      }))}
       limits={{ ...LIMITS, pastedText: MAX_PASTED_TEXT_LENGTH }}
     />
   );

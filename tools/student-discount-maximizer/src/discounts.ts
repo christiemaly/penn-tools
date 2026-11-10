@@ -56,6 +56,22 @@ export const NEIGHBORHOOD_LABELS: Record<Neighborhood, string> = {
   other: "Other Philly",
 };
 
+/** What kind of saving a deal is: with dealSummary, this makes the card's headline. */
+export const DEAL_TYPES = ["percent", "amount", "bogo", "free_item", "student_price", "other"] as const;
+export type DealType = (typeof DEAL_TYPES)[number];
+
+export const DEAL_TYPE_LABELS: Record<DealType, string> = {
+  percent: "% off",
+  amount: "$ off",
+  bogo: "Buy one, get one (BOGO)",
+  free_item: "Something free",
+  student_price: "Student price",
+  other: "Other",
+};
+
+/** Deal types that need a number: 20 for 20% off, 5 for $5 off. */
+export const DEAL_TYPES_NEEDING_AMOUNT: readonly DealType[] = ["percent", "amount"];
+
 export type DiscountStatus = "active" | "expired";
 /** "az": by business, then title; "top": most "works" votes net of "doesn't work"; "new": newest first. */
 export type DiscountSort = "az" | "top" | "new";
@@ -70,7 +86,8 @@ export const EXPIRE_MIN_NOT_WORKING = 3;
 export const LIMITS = {
   business: 100,
   title: 150,
-  discount: 100,
+  discount: 300,
+  appliesTo: 100,
   code: 60,
   location: 200,
   url: 500,
@@ -82,8 +99,17 @@ export interface Discount {
   id: string;
   kind: DiscountKind;
   business: string;
-  title: string;
-  /** What you get, e.g. "50% off" or "Free admission". */
+  /** An optional headline; cards fall back to `summary`. */
+  title: string | null;
+  /** Null for older deals added before deal types; they show `discount` instead. */
+  dealType: DealType | null;
+  /** The number for % off, $ off or a student price. */
+  amount: number | null;
+  /** What it's for, e.g. "bowls"; null for everything. */
+  appliesTo: string | null;
+  /** The headline built from the deal type, e.g. "20% off bowls" (see dealSummary). */
+  summary: string;
+  /** Details in the student's words, e.g. "Tuesdays only, show your PennCard"; may be empty. */
   discount: string;
   code: string | null;
   location: string | null;
@@ -109,11 +135,18 @@ export interface Discount {
   myVote: boolean | null;
 }
 
-/** A deal a student adds. Empty optional fields are null. */
+/**
+ * A deal a student adds. Only the business and the deal type are required
+ * (plus the amount for % off and $ off, and details for "other"); empty
+ * optional fields are null.
+ */
 export interface NewDiscount {
   kind: DiscountKind;
   business: string;
-  title: string;
+  title: string | null;
+  dealType: DealType;
+  amount: number | null;
+  appliesTo: string | null;
   discount: string;
   code: string | null;
   location: string | null;
@@ -170,34 +203,91 @@ function link(value: unknown, required: boolean): string | null {
   return url;
 }
 
+/** A positive number from the form (which sends text), or null when empty. */
+function amountOf(value: unknown, dealType: DealType): number | null {
+  if (value === null || value === undefined || value === "") {
+    if (DEAL_TYPES_NEEDING_AMOUNT.includes(dealType)) {
+      throw new DiscountError(dealType === "percent" ? "Enter the percentage off." : "Enter how many dollars off.");
+    }
+    return null;
+  }
+  const amount = typeof value === "number" ? value : Number(String(value).replace(/[$%,\s]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) throw new DiscountError("Enter the amount as a number, like 20.");
+  if (dealType === "percent" && amount > 100) throw new DiscountError("A percentage off can't be more than 100.");
+  if (amount >= 100000) throw new DiscountError("That amount looks too large.");
+  return Math.round(amount * 100) / 100;
+}
+
 /** A new deal from the browser's input, checked; throws DiscountError if something's wrong. */
 export function checkNewDiscount(input: unknown): NewDiscount {
   if (typeof input !== "object" || input === null) throw new DiscountError("Fill in the deal's details.");
   const raw = input as Record<string, unknown>;
-  const kind = raw["kind"];
-  if (!KINDS.includes(kind as DiscountKind)) throw new DiscountError("Choose what kind of deal it is.");
-  const category = raw["category"];
+  const business = text(raw["business"], "Establishment name", LIMITS.business, true)!;
+  const dealType = raw["dealType"];
+  if (!DEAL_TYPES.includes(dealType as DealType)) throw new DiscountError("Choose what kind of deal it is.");
+  // Optional, with defaults: most deals students add are in person.
+  const kind = raw["kind"] ?? "local";
+  if (!KINDS.includes(kind as DiscountKind)) throw new DiscountError("Choose where the deal is used.");
+  const category = raw["category"] || "other";
   if (!CATEGORIES.includes(category as DiscountCategory)) throw new DiscountError("Choose a category.");
   // Only local spots have a neighborhood; it's ignored for the others.
-  const neighborhood = kind === "local" ? raw["neighborhood"] : null;
-  if (kind === "local" && !NEIGHBORHOODS.includes(neighborhood as Neighborhood)) {
-    throw new DiscountError("Choose the spot's neighborhood.");
+  const neighborhood = kind === "local" ? raw["neighborhood"] || null : null;
+  if (neighborhood !== null && !NEIGHBORHOODS.includes(neighborhood as Neighborhood)) {
+    throw new DiscountError("Choose a neighborhood from the list.");
   }
 
   return {
     kind: kind as DiscountKind,
-    business: text(raw["business"], "Business", LIMITS.business, true)!,
-    title: text(raw["title"], "Title", LIMITS.title, true)!,
-    discount: text(raw["discount"], "Discount", LIMITS.discount, true)!,
+    business,
+    title: text(raw["title"], "Title", LIMITS.title, false),
+    dealType: dealType as DealType,
+    amount: amountOf(raw["amount"], dealType as DealType),
+    appliesTo: text(raw["appliesTo"], "What it applies to", LIMITS.appliesTo, false),
+    // "Other" has no structure of its own, so it needs words.
+    discount: text(raw["discount"], "Details", LIMITS.discount, dealType === "other") ?? "",
+    // A promo code deal is the code.
     code: text(raw["code"], "Code", LIMITS.code, kind === "code"),
-    location: text(raw["location"], "Location", LIMITS.location, kind === "local"),
+    location: text(raw["location"], "Address", LIMITS.location, false),
     neighborhood: neighborhood as Neighborhood | null,
-    // Codes and online deals are used on a website; local spots may not have one.
-    url: link(raw["url"], kind !== "local"),
+    url: link(raw["url"], false),
     howToClaim: text(raw["howToClaim"], "How to claim", LIMITS.howToClaim, false) ?? "",
     category: category as DiscountCategory,
     pennSpecific: raw["pennSpecific"] === true,
   };
+}
+
+/** Formats an amount without a trailing ".00": 20 → "20", 4.5 → "4.50". */
+function formatAmount(amount: number): string {
+  return Number.isInteger(amount) ? String(amount) : amount.toFixed(2);
+}
+
+/**
+ * The deal's headline, e.g. "20% off bowls", "$5 off", "Buy one, get one free",
+ * "Free admission" or "$4.50 student price". Deals with no deal type, or
+ * "other", use their details.
+ */
+export function dealSummary(deal: {
+  dealType: DealType | null;
+  amount: number | null;
+  appliesTo: string | null;
+  discount: string;
+}): string {
+  const { dealType, amount, appliesTo, discount } = deal;
+  const on = appliesTo ? ` ${appliesTo}` : "";
+  switch (dealType) {
+    case "percent":
+      return amount !== null ? `${formatAmount(amount)}% off${on || " everything"}` : `Percent off${on}`;
+    case "amount":
+      return amount !== null ? `$${formatAmount(amount)} off${on}` : `Money off${on}`;
+    case "bogo":
+      return `Buy one, get one free${appliesTo ? `: ${appliesTo}` : ""}`;
+    case "free_item":
+      return appliesTo ? `Free ${appliesTo}` : "Something free";
+    case "student_price":
+      return `${amount !== null ? `$${formatAmount(amount)} student price` : "Student price"}${appliesTo ? ` for ${appliesTo}` : ""}`;
+    default:
+      return discount || "Student discount";
+  }
 }
 
 // ── Reading ───────────────────────────────────────────────────────────────────
@@ -206,7 +296,11 @@ interface DiscountRow {
   id: string;
   kind: DiscountKind;
   business: string;
-  title: string;
+  title: string | null;
+  deal_type: DealType | null;
+  /** NUMERIC comes back as text. */
+  amount: string | null;
+  applies_to: string | null;
   discount: string;
   code: string | null;
   location: string | null;
@@ -231,6 +325,15 @@ function toDiscount(row: DiscountRow): Discount {
     kind: row.kind,
     business: row.business,
     title: row.title,
+    dealType: row.deal_type,
+    amount: row.amount === null ? null : Number(row.amount),
+    appliesTo: row.applies_to,
+    summary: dealSummary({
+      dealType: row.deal_type,
+      amount: row.amount === null ? null : Number(row.amount),
+      appliesTo: row.applies_to,
+      discount: row.discount,
+    }),
     discount: row.discount,
     code: row.code,
     location: row.location,
@@ -260,6 +363,18 @@ export function mapsUrl(business: string, location: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${business}, ${place}`)}`;
 }
 
+/** The columns of a DiscountRow, for a query over discounts d LEFT JOIN votes v, grouped by d.id. */
+function discountColumns(sql: Sql, userId: string | null) {
+  return sql`
+    d.id, d.kind, d.business, d.title, d.deal_type, d.amount, d.applies_to, d.discount, d.code,
+    d.location, d.neighborhood, d.url, d.how_to_claim, d.category, d.penn_specific, d.source,
+    d.status, d.expired_reason, d.status_changed_at, d.created_at,
+    COUNT(v.user_id) FILTER (WHERE v.works) AS works,
+    COUNT(v.user_id) FILTER (WHERE NOT v.works) AS not_working,
+    BOOL_OR(v.works) FILTER (WHERE v.user_id = ${userId ?? ""}) AS my_vote
+  `;
+}
+
 /** Escapes LIKE wildcards so a search for "50%" finds the text "50%". */
 function likePattern(search: string): string {
   return `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -281,12 +396,7 @@ export async function listDiscounts(sql: Sql, options: ListOptions): Promise<Dis
           : sql`COUNT(v.user_id) FILTER (WHERE v.works) - COUNT(v.user_id) FILTER (WHERE NOT v.works) DESC, d.created_at DESC`;
 
   const rows = await sql<DiscountRow[]>`
-    SELECT d.id, d.kind, d.business, d.title, d.discount, d.code, d.location, d.neighborhood, d.url,
-           d.how_to_claim, d.category, d.penn_specific, d.source, d.status, d.expired_reason,
-           d.status_changed_at, d.created_at,
-           COUNT(v.user_id) FILTER (WHERE v.works) AS works,
-           COUNT(v.user_id) FILTER (WHERE NOT v.works) AS not_working,
-           BOOL_OR(v.works) FILTER (WHERE v.user_id = ${userId ?? ""}) AS my_vote
+    SELECT ${discountColumns(sql, userId)}
     FROM discounts d
     LEFT JOIN votes v ON v.discount_id = d.id
     WHERE d.status = ${status}
@@ -296,8 +406,8 @@ export async function listDiscounts(sql: Sql, options: ListOptions): Promise<Dis
       ${neighborhood ? sql`AND d.kind = 'local' AND d.neighborhood = ${neighborhood}` : sql``}
       ${
         pattern
-          ? sql`AND (d.business ILIKE ${pattern} OR d.title ILIKE ${pattern}
-                  OR d.discount ILIKE ${pattern} OR d.location ILIKE ${pattern})`
+          ? sql`AND (d.business ILIKE ${pattern} OR d.title ILIKE ${pattern} OR d.discount ILIKE ${pattern}
+                  OR d.applies_to ILIKE ${pattern} OR d.location ILIKE ${pattern})`
           : sql``
       }
     GROUP BY d.id
@@ -311,12 +421,7 @@ export async function listDiscounts(sql: Sql, options: ListOptions): Promise<Dis
 export async function getDiscount(sql: Sql, id: string, userId: string | null): Promise<Discount | null> {
   if (!UUID_RE.test(id)) return null;
   const [row] = await sql<DiscountRow[]>`
-    SELECT d.id, d.kind, d.business, d.title, d.discount, d.code, d.location, d.neighborhood, d.url,
-           d.how_to_claim, d.category, d.penn_specific, d.source, d.status, d.expired_reason,
-           d.status_changed_at, d.created_at,
-           COUNT(v.user_id) FILTER (WHERE v.works) AS works,
-           COUNT(v.user_id) FILTER (WHERE NOT v.works) AS not_working,
-           BOOL_OR(v.works) FILTER (WHERE v.user_id = ${userId ?? ""}) AS my_vote
+    SELECT ${discountColumns(sql, userId)}
     FROM discounts d
     LEFT JOIN votes v ON v.discount_id = d.id
     WHERE d.id = ${id}
@@ -339,10 +444,11 @@ export async function addDiscount(sql: Sql, userId: string, input: unknown): Pro
   }
 
   const [row] = await sql<{ id: string }[]>`
-    INSERT INTO discounts (kind, business, title, discount, code, location, neighborhood, url, how_to_claim,
-                           category, penn_specific, source, created_by)
-    VALUES (${deal.kind}, ${deal.business}, ${deal.title}, ${deal.discount}, ${deal.code}, ${deal.location},
-            ${deal.neighborhood}, ${deal.url}, ${deal.howToClaim}, ${deal.category}, ${deal.pennSpecific}, 'student', ${userId})
+    INSERT INTO discounts (kind, business, title, deal_type, amount, applies_to, discount, code, location,
+                           neighborhood, url, how_to_claim, category, penn_specific, source, created_by)
+    VALUES (${deal.kind}, ${deal.business}, ${deal.title}, ${deal.dealType}, ${deal.amount}, ${deal.appliesTo},
+            ${deal.discount}, ${deal.code}, ${deal.location}, ${deal.neighborhood}, ${deal.url}, ${deal.howToClaim},
+            ${deal.category}, ${deal.pennSpecific}, 'student', ${userId})
     RETURNING id
   `;
   return (await getDiscount(sql, row!.id, userId))!;
